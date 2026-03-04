@@ -55,7 +55,7 @@
       formatter.${system} = treefmtEval.config.build.wrapper;
       checks.${system}.formatting = treefmtEval.config.build.check inputs.self;
       devShells.${system}.default = pkgs.devshell.mkShell {
-        name = "${projectName}";
+        name = "${projectName}-dev";
         motd = "{32}${projectName} activated{reset}\n$(type -p menu &>/dev/null && menu)\n";
 
         env = with pkgs; [
@@ -114,7 +114,6 @@
           bubblewrap
           claude-code
           codex
-          gh
           nodejs_latest
           poetry
           pre-commit
