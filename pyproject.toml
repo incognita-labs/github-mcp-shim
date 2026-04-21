@@ -1,6 +1,6 @@
 [project]
 name = "github-mcp-shim"
-version = "0.1.0"
+version = "0.2.0"
 description = "A stdio-to-http shim for using GitHub Apps with the GitHub MCP server"
 readme = "README.md"
 requires-python = ">=3.9"
