@@ -58,6 +58,26 @@ class GitHubAppAuth:
             return self.token
 
 
+class MCPSession:
+    def __init__(self):
+        self.session_id = None
+
+    def build_headers(self, token):
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+        if self.session_id:
+            headers["Mcp-Session-Id"] = self.session_id
+        return headers
+
+    def update_from_response(self, response):
+        session_id = response.headers.get("mcp-session-id")
+        if session_id and session_id != self.session_id:
+            self.session_id = session_id
+            log.info("using MCP session_id=%s", session_id)
+
+
 def parse_sse_messages(text):
     """Parse SSE text into a list of data strings."""
     messages = []
@@ -76,6 +96,7 @@ def parse_sse_messages(text):
 
 async def main():
     auth = GitHubAppAuth()
+    mcp_session = MCPSession()
     log.info(
         "started: client_id=%s installation_id=%s mcp_url=%s",
         CLIENT_ID,
@@ -98,14 +119,12 @@ async def main():
                 response = await client.post(
                     REMOTE_MCP_URL,
                     json=request_json,
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Content-Type": "application/json",
-                    },
+                    headers=mcp_session.build_headers(token),
                     timeout=30.0,
                 )
 
                 content_type = response.headers.get("content-type", "")
+                mcp_session.update_from_response(response)
                 log.debug(
                     "response: status=%d content-type=%s",
                     response.status_code,
@@ -127,18 +146,30 @@ async def main():
                         log.debug("SSE data: %s", data[:200])
                         sys.stdout.write(data + "\n")
                 else:
-                    sys.stdout.write(json.dumps(response.json()) + "\n")
+                    if response.content:
+                        sys.stdout.write(json.dumps(response.json()) + "\n")
+                    elif request_json.get("id") is not None:
+                        error_msg = {
+                            "jsonrpc": "2.0",
+                            "error": {
+                                "code": -32603,
+                                "message": f"MCP upstream returned empty body for request id {request_json['id']}",
+                            },
+                            "id": request_json["id"],
+                        }
+                        sys.stdout.write(json.dumps(error_msg) + "\n")
                 sys.stdout.flush()
 
         except Exception as e:
             log.error("%s: %s", type(e).__name__, e)
-            error_msg = {
-                "jsonrpc": "2.0",
-                "error": {"code": -32603, "message": str(e)},
-                "id": None,
-            }
-            sys.stdout.write(json.dumps(error_msg) + "\n")
-            sys.stdout.flush()
+            if request_json.get("id") is not None:
+                error_msg = {
+                    "jsonrpc": "2.0",
+                    "error": {"code": -32603, "message": str(e)},
+                    "id": request_json["id"],
+                }
+                sys.stdout.write(json.dumps(error_msg) + "\n")
+                sys.stdout.flush()
 
 
 def main_entry():
